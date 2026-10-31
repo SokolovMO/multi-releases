@@ -1,0 +1,36 @@
+name: Refresh delivery site
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['site/**', '.github/workflows/refresh-delivery.yml']
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: public-delivery
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: macos-15
+    environment: public-delivery
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned Sparkle tools
+        run: bash scripts/prepare_sparkle.sh
+      - name: Generate signed feeds from current published releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MULTISHIFT_SPARKLE_PUBLIC_KEY: ${{ vars.MULTISHIFT_SPARKLE_PUBLIC_KEY }}
+          MULTISWITCHER_SPARKLE_PUBLIC_KEY: ${{ vars.MULTISWITCHER_SPARKLE_PUBLIC_KEY }}
+          MULTISHIFT_SPARKLE_PRIVATE_KEY_BASE64: ${{ secrets.MULTISHIFT_SPARKLE_PRIVATE_KEY_BASE64 }}
+          MULTISWITCHER_SPARKLE_PRIVATE_KEY_BASE64: ${{ secrets.MULTISWITCHER_SPARKLE_PRIVATE_KEY_BASE64 }}
+        run: python3 scripts/releasekit.py feeds --sign-update "$RUNNER_TEMP/multishift-sparkle-2.10.0/bin/sign_update"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
+      - name: Verify public delivery
+        run: python3 scripts/verify_delivery.py
