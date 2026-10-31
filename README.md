@@ -11,6 +11,8 @@ Public delivery repository for MultiShift and MultiSwitcher. Private source repo
 - Merge the prepared workflows into each source main. Source release builders keep Developer ID/notarization as hard gates; the first pilot disables crash reporting.
 - Configure the Next.js console OAuth and GitHub App credentials per its README.
 
+`queue: max` retains waiting commands instead of replacing the previous pending run (up to GitHub’s documented queue limit; see https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+
 `release-control.yml` serializes all public state changes and Pages deployments. It rebuilds feeds from the current published state, never from the release event's older snapshot. Stable entries have no Sparkle channel; beta entries are marked beta. Every feed and artifact is EdDSA signed. There is no unsigned fallback.
 
 ## Recovery

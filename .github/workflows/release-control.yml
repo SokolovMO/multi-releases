@@ -29,6 +29,7 @@ permissions:
 concurrency:
   group: public-delivery
   cancel-in-progress: false
+  queue: max
 jobs:
   deliver:
     runs-on: macos-15
