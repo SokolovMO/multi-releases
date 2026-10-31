@@ -1,0 +1,77 @@
+name: Release control
+run-name: ${{ inputs.command }} · ${{ inputs.app }} · ${{ inputs.tag }}
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        type: choice
+        options: [publish, withdraw, rebuild]
+        required: true
+      app:
+        type: choice
+        options: [MultiShift, MultiSwitcher]
+        required: true
+      tag:
+        type: string
+      candidate_id:
+        type: string
+      acceptance:
+        type: string
+        default: '{}'
+env:
+  MULTISHIFT_SPARKLE_PUBLIC_KEY: ${{ vars.MULTISHIFT_SPARKLE_PUBLIC_KEY }}
+  MULTISWITCHER_SPARKLE_PUBLIC_KEY: ${{ vars.MULTISWITCHER_SPARKLE_PUBLIC_KEY }}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: public-delivery
+  cancel-in-progress: false
+jobs:
+  deliver:
+    runs-on: macos-15
+    environment: public-delivery
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: SokolovMO
+          repositories: |
+            MultiShift
+            MultiSwitcher
+            multi-releases
+      - name: Require both feed signing keys before any publication
+        env:
+          SHIFT_KEY: ${{ secrets.MULTISHIFT_SPARKLE_PRIVATE_KEY_BASE64 }}
+          SWITCHER_KEY: ${{ secrets.MULTISWITCHER_SPARKLE_PRIVATE_KEY_BASE64 }}
+        run: |
+          test -n "$SHIFT_KEY" && test -n "$SWITCHER_KEY"
+          test -n "$MULTISHIFT_SPARKLE_PUBLIC_KEY" && test -n "$MULTISWITCHER_SPARKLE_PUBLIC_KEY"
+      - name: Apply requested state transition
+        if: inputs.command != 'rebuild'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          COMMAND: ${{ inputs.command }}
+          APP: ${{ inputs.app }}
+          TAG: ${{ inputs.tag }}
+          CANDIDATE_ID: ${{ inputs.candidate_id }}
+          ACCEPTANCE: ${{ inputs.acceptance }}
+        run: python3 scripts/releasekit.py "$COMMAND" --app "$APP" --tag "$TAG" --candidate-id "$CANDIDATE_ID" --acceptance "$ACCEPTANCE"
+      - name: Prepare pinned Sparkle tools
+        run: bash scripts/prepare_sparkle.sh
+      - name: Rebuild both channel feeds from current published state
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          MULTISHIFT_SPARKLE_PRIVATE_KEY_BASE64: ${{ secrets.MULTISHIFT_SPARKLE_PRIVATE_KEY_BASE64 }}
+          MULTISWITCHER_SPARKLE_PRIVATE_KEY_BASE64: ${{ secrets.MULTISWITCHER_SPARKLE_PRIVATE_KEY_BASE64 }}
+        run: python3 scripts/releasekit.py feeds --sign-update "$RUNNER_TEMP/multishift-sparkle-2.10.0/bin/sign_update"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
